@@ -1,0 +1,5 @@
+{
+  "watch": ["src", "../express-kun/src"],
+  "ext": "ts",
+  "exec": "ts-node src/index.ts"
+}
