@@ -9,20 +9,20 @@ export interface ResourceController {
 }
 type AcceptedTypesType = typeof ACCEPTED_TYPES[number];
 
-interface TemplateObject {
-  type: AcceptedTypesType;
-  required?: boolean;
-  unique?: boolean;
+export interface TemplateObject<AcceptedTypeGeneric = any> {
+  type?: AcceptedTypeGeneric;
+  isRequired?: boolean;
+  isUnique?: boolean;
+  isSelected?: boolean;
+  [key: string]: any;
 }
 
-type Template = TemplateObject | AcceptedTypesType;
+export type Template = TemplateObject | AcceptedTypesType;
 
 export interface Config {
   resource: {
     [key: string]: {
-      model: {
-        [key: string]: Template;
-      };
+      model: Record<string, Template>;
     };
   };
 }

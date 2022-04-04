@@ -6,7 +6,8 @@ function createAppAndRequest() {
   const router = express.Router();
 
   app.use(router);
-  const agent = request(app);
+  app.use(express.json());
+  const agent = request.agent(app);
 
   return { agent, app, router };
 }

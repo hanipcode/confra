@@ -1,6 +1,11 @@
 /** @type {import('ts-jest/dist/types').InitialOptionsTsJest} */
 module.exports = {
   roots: ['<rootDir>/src'],
+  globals: {
+    'ts-jest': {
+      diagnostics: false,
+    },
+  },
   globalTeardown: '<rootDir>/jest.afterEnv.js',
   preset: 'ts-jest',
   testEnvironment: 'node',

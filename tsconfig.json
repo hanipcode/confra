@@ -2,6 +2,8 @@
   "compilerOptions": {
     "target": "es5",
     "moduleResolution": "node",
+    "skipLibCheck": true,
+    "skipDefaultLibCheck": true,
     "esModuleInterop": true,
     "lib": ["es2015"],
     "strict": true,
