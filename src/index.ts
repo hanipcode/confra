@@ -1,9 +1,17 @@
-import express, { NextFunction, Request, Response } from 'express';
+import express, {
+  ErrorRequestHandler,
+  NextFunction,
+  Request,
+  Response,
+} from 'express';
 import { RESOURCE_ROUTES, sampleConfig } from './constants';
 import {
   Config,
+  ConfigParam,
+  ModelTransformerFN,
   ResourceController,
   TemplateObject,
+  TransformerFn,
 } from './interfaces/interface';
 import {
   Model,
@@ -14,6 +22,9 @@ import {
 import initDB from './util/initDb';
 import * as yup from 'yup';
 import { ValidationError } from 'yup';
+import { getWording, setWordings } from './defaults/defaultWording';
+import defaultErrorHandlerMiddleware from './defaults/defaultErrorHandler';
+import { withErrorHandler } from 'express-kun';
 
 initDB();
 
@@ -46,9 +57,10 @@ const defaultBodyValidation = {
       prev[key] = keyShape;
       return prev;
     }, {} as Record<string, any>);
-    console.log(shape);
     const bodyValidation = yup.object().shape(shape);
-    bodyValidation.validateSync(body);
+    bodyValidation.validateSync(body, {
+      abortEarly: false,
+    });
   },
 };
 /* phase 4 make data retrival and saving data to db */
@@ -67,25 +79,16 @@ const generateDefaultControllers = (
     },
     post: async (req: Request, res: Response, next: NextFunction) => {
       const modelDataKeys = Object.keys(modelData);
-      try {
-        bodyValidation.post(req.body, modelData);
-      } catch (err) {
-        console.log(err);
-        res.status(400).json({
-          success: false,
-          error: err,
-        });
-        return;
-      }
+      bodyValidation.post(req.body, modelData);
       const data = modelDataKeys.reduce((prev, key) => {
         prev[key] = req.body[key];
         return prev;
       }, {} as Record<string, any>);
 
-      // const newData = await model.create(data);
+      const newData = await model.create(data);
       res.json({
         success: true,
-        // data: newData,
+        data: newData,
       });
     },
     put: async (req: Request, res: Response, next: NextFunction) => {
@@ -135,12 +138,15 @@ export function transformResourceToResourceControllers(
 }
 
 export function createRoutesFromResourceController(
-  resource: Config['resource'],
+  config: Config,
   resourceControllers: Record<string, ResourceController>
 ) {
-  const resourceKeys = Object.keys(resource);
+  const resourceKeys = Object.keys(config.resource);
 
-  const router = express.Router();
+  const router = withErrorHandler(
+    express.Router(),
+    config.baseConfig.errorHandlers[0]
+  );
 
   resourceKeys.forEach((key) => {
     RESOURCE_ROUTES.forEach((routeKey) => {
@@ -171,9 +177,7 @@ const resourceReducer = <T = Record<string, any>>(
  * try to imagine if having different structure
  */
 /* transform to mongoose */
-type TransformerFn<Type = SchemaTypeOptions<TemplateObject>> = (
-  template: TemplateObject
-) => Type;
+
 const mongooseTransformer: TransformerFn<SchemaTypeOptions<TemplateObject>> = (
   template: TemplateObject
 ) => {
@@ -181,12 +185,12 @@ const mongooseTransformer: TransformerFn<SchemaTypeOptions<TemplateObject>> = (
   const keyDictionary: Array<CurrentDictionary> = [
     ['isRequired', 'required'],
     ['isUnique', 'unique'],
-    ['isSelected', 'selected'],
+    ['isSelected', 'select'],
   ];
 
   keyDictionary.forEach((currentDictionary: CurrentDictionary) => {
     const [toMap, mapped] = currentDictionary;
-    if (template[toMap]) {
+    if (template[toMap] !== undefined) {
       template[mapped as string] = template[toMap];
     }
     return template;
@@ -210,7 +214,7 @@ const transformToMongooseModel = (
 
 export const transformModel = (
   resource: Config['resource'],
-  modelTransformer = transformToMongooseModel
+  modelTransformer: ModelTransformerFN
 ) => {
   return resourceReducer(resource, (curentResult, resourceKey) => {
     curentResult[resourceKey] = modelTransformer(
@@ -221,23 +225,56 @@ export const transformModel = (
   });
 };
 
+export const mergeWithDefaultConfig = (config: ConfigParam): Config => {
+  {
+    const errorHandlers: ErrorRequestHandler[] = Array.isArray(
+      config.baseConfig?.errorHandlers
+    )
+      ? (config.baseConfig?.errorHandlers as ErrorRequestHandler[]).concat(
+          defaultErrorHandlerMiddleware
+        )
+      : [defaultErrorHandlerMiddleware];
+    const modelTransformer =
+      config.baseConfig?.modelTransformer || transformToMongooseModel;
+
+    if (config.wordings) {
+      setWordings(config.wordings);
+    }
+
+    const wordings = getWording();
+
+    return {
+      ...config,
+      baseConfig: {
+        errorHandlers: errorHandlers,
+        modelTransformer: modelTransformer,
+      },
+      wordings,
+    };
+  }
+};
 /*
  * Phase 3: connect controller with model
  */
-export const createMagiciaApp = (config: Config) => {
+export const createMagiciaApp = (configParam: ConfigParam) => {
   const app = express();
   app.use(express.json());
-  const models = transformModel(config.resource);
+  const config: Config = mergeWithDefaultConfig(configParam);
+  const models = transformModel(
+    config.resource,
+    config.baseConfig.modelTransformer
+  );
   const resourceControllers = transformResourceToResourceControllers(
     config.resource,
     models
   );
   const router = createRoutesFromResourceController(
-    config.resource,
+    config,
     resourceControllers
   );
 
   app.use(router);
+  app.use(config.baseConfig.errorHandlers);
 
   return app;
 };

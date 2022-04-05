@@ -8,13 +8,19 @@ const uriByEnv = {
 const { ENV } = process.env;
 const uri = ENV === 'test' ? uriByEnv.test : uriByEnv.local;
 
-const initDB = () => {
-  return mongoose.connect(uri, (err) => {
-    if (err) {
-      console.log(err.message);
-      throw new Error('Error Connecting to Database');
-    }
-  });
+let connection: typeof mongoose.connection;
+const initDB = async () => {
+  connection = (await mongoose.connect(uri)).connection;
+  connection.dropDatabase();
+  return connection;
 };
+
+export function getConnection() {
+  if (!connection) {
+    throw new Error('getConnection used before connection exist');
+  }
+
+  return connection;
+}
 
 export default initDB;

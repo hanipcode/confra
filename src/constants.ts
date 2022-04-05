@@ -1,9 +1,15 @@
-import { Config, ResourceController } from './interfaces/interface';
-import { NextFunction, Request, RequestHandler, Response } from 'express';
+import bcrypt from 'bcrypt';
+import { Config, ConfigParam } from './interfaces/interface';
 export const RESOURCE_ROUTES = ['get', 'post', 'put', 'delete'] as const;
 export const ACCEPTED_TYPES = [String, Number, Boolean] as const;
 
-export const sampleConfig: Config = {
+const SALT = 10;
+
+function hashPassword(value: any) {
+  return bcrypt.hashSync(value, SALT);
+}
+
+export const sampleConfig: ConfigParam = {
   resource: {
     user: {
       model: {
@@ -14,12 +20,15 @@ export const sampleConfig: Config = {
         // object based typing
         email: {
           type: String,
-          isRequired: false,
+          unique: true,
+          isRequired: true,
         },
         // allow direct typing
         password: {
           type: String,
           isSelected: true,
+          set: hashPassword,
+          isRequired: true,
         },
       },
     },
